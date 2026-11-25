@@ -1,0 +1,75 @@
+name: siruang-db
+
+# ---------- Template (anchor) ----------
+x-config-server: &config-server
+  image: mongo:7.0
+  restart: unless-stopped
+  command: mongod --configsvr --replSet cfgRS --port 27017 --bind_ip_all --wiredTigerCacheSizeGB 0.25
+  networks: [siruang-net]
+
+x-shard01: &shard01
+  image: mongo:7.0
+  restart: unless-stopped
+  command: mongod --shardsvr --replSet shard01 --port 27017 --bind_ip_all --wiredTigerCacheSizeGB 0.25
+  networks: [siruang-net]
+
+x-shard02: &shard02
+  image: mongo:7.0
+  restart: unless-stopped
+  command: mongod --shardsvr --replSet shard02 --port 27017 --bind_ip_all --wiredTigerCacheSizeGB 0.25
+  networks: [siruang-net]
+
+x-redis: &redis
+  image: redis:7.2-alpine
+  restart: unless-stopped
+  command: redis-server --port 6379 --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes
+
+services:
+  # ---------- MongoDB: Config Server Replica Set ----------
+  cfg1: { <<: *config-server, container_name: cfg1 }
+  cfg2: { <<: *config-server, container_name: cfg2 }
+  cfg3: { <<: *config-server, container_name: cfg3 }
+
+  # ---------- MongoDB: shard01 (Zona A) ----------
+  shard01-a: { <<: *shard01, container_name: shard01-a, ports: ["27018:27017"] }
+  shard01-b: { <<: *shard01, container_name: shard01-b }
+  shard01-c: { <<: *shard01, container_name: shard01-c }
+
+  # ---------- MongoDB: shard02 (Zona B) ----------
+  shard02-a: { <<: *shard02, container_name: shard02-a, ports: ["27019:27017"] }
+  shard02-b: { <<: *shard02, container_name: shard02-b }
+  shard02-c: { <<: *shard02, container_name: shard02-c }
+
+  # ---------- MongoDB: Query Router ----------
+  mongos:
+    image: mongo:7.0
+    container_name: mongos
+    restart: unless-stopped
+    command: mongos --configdb cfgRS/cfg1:27017,cfg2:27017,cfg3:27017 --port 27017 --bind_ip_all
+    ports:
+      - "27017:27017"
+    depends_on: [cfg1, cfg2, cfg3]
+    networks: [siruang-net]
+
+  # ---------- Redis Cluster ----------
+  redis-1: { <<: *redis, container_name: redis-1, networks: { siruang-net: { ipv4_address: 172.30.0.31 } } }
+  redis-2: { <<: *redis, container_name: redis-2, networks: { siruang-net: { ipv4_address: 172.30.0.32 } } }
+  redis-3: { <<: *redis, container_name: redis-3, networks: { siruang-net: { ipv4_address: 172.30.0.33 } } }
+  redis-4: { <<: *redis, container_name: redis-4, networks: { siruang-net: { ipv4_address: 172.30.0.34 } } }
+  redis-5: { <<: *redis, container_name: redis-5, networks: { siruang-net: { ipv4_address: 172.30.0.35 } } }
+  redis-6: { <<: *redis, container_name: redis-6, networks: { siruang-net: { ipv4_address: 172.30.0.36 } } }
+
+  redisinsight:
+    image: redis/redisinsight:latest
+    container_name: redisinsight
+    restart: unless-stopped
+    ports:
+      - "5540:5540"
+    networks: [siruang-net]
+    depends_on: [redis-1, redis-2, redis-3, redis-4, redis-5, redis-6]
+
+networks:
+  siruang-net:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24

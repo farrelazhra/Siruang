@@ -1,0 +1,68 @@
+// TC-01: alur pengajuan sampai disetujui (Laporan Bab 4). Perintah MongoDB di Compass, perintah Redis di RedisInsight Workbench, berurutan.
+// Jalankan satu blok per langkah, jangan sekaligus.
+
+// ------------------------------------------------------------
+// [Laporan Bab 4 · TC-01 no. 1] ① Peminjam A membuka kalender
+// Jalankan di: RedisInsight · Workbench
+EXISTS kalender:{FILKOM-GKM-02}:2026-12-05
+// Hasil yang diharapkan: 0
+
+// ------------------------------------------------------------
+// [Laporan Bab 4 · TC-01 no. 2] ② Membaca slot terisi di MongoDB
+// Jalankan di: Compass · MONGOSH
+db.reservasi_slots.find({ fakultas_id: "FILKOM", ruang_id: "FILKOM-GKM-02", tanggal: "2026-12-05" })
+// Hasil yang diharapkan: (kosong)
+
+// ------------------------------------------------------------
+// [Laporan Bab 4 · TC-01 no. 3] ③ Peminjam A mengajukan S04 + S05
+// Jalankan di: Compass · MONGOSH
+ajukanPeminjaman(pengajuanBaru("PGJ-0010", A, "FILKOM-GKM-02", "FILKOM", "2026-12-05", ["S04","S05"]))
+// Hasil yang diharapkan: BERHASIL: PGJ-0010
+
+// ------------------------------------------------------------
+// [Laporan Bab 4 · TC-01 no. 4] ④ Cache kalender diperbarui
+// Jalankan di: RedisInsight · Workbench
+HSET kalender:{FILKOM-GKM-02}:2026-12-05 S04 "menunggu|PGJ-0010|BEM FILKOM" S05 "menunggu|PGJ-0010|BEM FILKOM"
+EXPIRE kalender:{FILKOM-GKM-02}:2026-12-05 86400
+// Hasil yang diharapkan: HSET 2 · EXPIRE 1
+
+// ------------------------------------------------------------
+// [Laporan Bab 4 · TC-01 no. 5] ⑤ Peminjam B membuka kalender
+// Jalankan di: RedisInsight · Workbench
+HEXISTS kalender:{FILKOM-GKM-02}:2026-12-05 S05
+HEXISTS kalender:{FILKOM-GKM-02}:2026-12-05 S06
+// Hasil yang diharapkan: S05 = 1 (terisi) · S06 = 0 (tersedia)
+
+// ------------------------------------------------------------
+// [Laporan Bab 4 · TC-01 no. 6] ⑥ Peminjam B tetap mengajukan S05 + S06
+// Jalankan di: Compass · MONGOSH
+ajukanPeminjaman(pengajuanBaru("PGJ-0011", B, "FILKOM-GKM-02", "FILKOM", "2026-12-05", ["S05","S06"]))
+// Hasil yang diharapkan: DITOLAK: E11000 duplicate key
+
+// ------------------------------------------------------------
+// [Laporan Bab 4 · TC-01 no. 7] ⑦ Sarpras FILKOM menyetujui PGJ-0010
+// Jalankan di: Compass · MONGOSH
+setujuiAkhir("FILKOM", "FILKOM-GKM-02", "PGJ-0010", 1, "USR-ADM-FILKOM-01")
+// Hasil yang diharapkan: PGJ-0010 DISETUJUI
+
+// ------------------------------------------------------------
+// [Laporan Bab 4 · TC-01 no. 8] ⑧ Notifikasi untuk peminjam A
+// Jalankan di: Compass · MONGOSH
+db.notifikasi.insertOne({ user_id: "USR-000123", jenis: "status_pengajuan", judul: "Pengajuan disetujui",
+  pesan: "GKM 2.2, 5 Des 2026, S04-S05 disetujui.",
+  referensi: { pengajuan_id: "PGJ-0010", fakultas_id: "FILKOM" }, dibaca: false, dibuat_pada: new Date() })
+// Hasil yang diharapkan: Dokumen notifikasi tersimpan
+
+// ------------------------------------------------------------
+// [Laporan Bab 4 · TC-01 no. 9] ⑨ Redis: status disetujui dan badge
+// Jalankan di: RedisInsight · Workbench
+HSET kalender:{FILKOM-GKM-02}:2026-12-05 S04 "disetujui|PGJ-0010|BEM FILKOM" S05 "disetujui|PGJ-0010|BEM FILKOM"
+INCR notif:unread:USR-000123
+// Hasil yang diharapkan: HSET 0 (field diperbarui) · INCR 1
+
+// ------------------------------------------------------------
+// [Laporan Bab 4 · TC-01 no. 10] ⑩ Hasil akhir
+// Jalankan di: RedisInsight · Workbench
+HGETALL kalender:{FILKOM-GKM-02}:2026-12-05
+GET notif:unread:USR-000123
+// Hasil yang diharapkan: S04 dan S05 disetujui · badge = 1

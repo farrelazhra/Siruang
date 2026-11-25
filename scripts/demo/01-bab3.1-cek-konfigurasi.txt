@@ -1,0 +1,33 @@
+// Pengecekan hasil konfigurasi cluster (Laporan 3.1). Konfigurasinya sendiri dijalankan otomatis oleh setup.ps1 / setup.sh.
+// Jalankan satu blok per langkah, jangan sekaligus.
+
+// ------------------------------------------------------------
+// [Laporan 3.1.2 – 3.1.3] Status replica set
+// Jalankan di: PowerShell
+foreach ($n in "cfg1","shard01-a","shard02-a") { docker exec $n mongosh --quiet --eval "rs.status().members.map(m => m.name + ' ' + m.stateStr).join(' | ')" }
+// Hasil yang diharapkan: 3 baris, masing-masing berisi 1 PRIMARY dan 2 SECONDARY. Node yang menjadi PRIMARY bisa -a, -b, atau -c; hasil election bisa berbeda setiap kali cluster dibuat.
+
+// ------------------------------------------------------------
+// [Laporan 3.1.4 a] Shard terdaftar (addShard)
+// Jalankan di: Compass · MONGOSH
+db.adminCommand({ listShards: 1 })
+// Hasil yang diharapkan: shards: shard01 (host shard01/shard01-a,b,c, tags ZONA_A) dan shard02 (host shard02/shard02-a,b,c, tags ZONA_B)
+
+// ------------------------------------------------------------
+// [Laporan 3.1.4 b – d] Zona dan shardCollection (sh.status)
+// Jalankan di: Compass · MONGOSH
+sh.status()
+// Hasil yang diharapkan: Hasilnya panjang. Scroll ke: shards (tags ZONA_A/ZONA_B) → databases → siruang (primary: shard01) → tiap koleksi: shard key, chunks per shard, dan tag ranges
+
+// ------------------------------------------------------------
+// [Laporan 3.1.5] Indexing
+// Jalankan di: Compass · tab Indexes
+// (Compass → siruang → reservasi_slots → tab Indexes. Lalu buka juga users dan pengajuan)
+// Hasil yang diharapkan: reservasi_slots: fakultas_id_1_ruang_id_1_tanggal_1_sesi_1 bertanda UNIQUE · users: email_1 UNIQUE dan internal.nim_nip_1 UNIQUE PARTIAL · notifikasi: dibuat_pada_1 TTL
+
+// ------------------------------------------------------------
+// [Laporan 3.1.6] Kondisi Redis Cluster
+// Jalankan di: RedisInsight · Workbench
+CLUSTER INFO
+CLUSTER NODES
+// Hasil yang diharapkan: cluster_state:ok · NODES: 3 master (slot 0-5460, 5461-10922, 10923-16383) dan 3 slave

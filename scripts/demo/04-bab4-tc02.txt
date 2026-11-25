@@ -1,0 +1,73 @@
+// TC-02: akun peminjam eksternal dari registrasi sampai logout (Laporan Bab 4).
+// Jalankan satu blok per langkah, jangan sekaligus.
+
+// ------------------------------------------------------------
+// [Laporan Bab 4 · TC-02 no. 1] ① Registrasi akun USR-009900
+// Jalankan di: Compass · MONGOSH
+db.users.insertOne({ _id: "USR-009900", jenis: "eksternal", nama: "Bima Pratama", email: "bima.pratama@gmail.com",
+  peran: ["peminjam"], eksternal: { instansi: "BEM Universitas Negeri Malang", status_verifikasi: "menunggu" },
+  email_terverifikasi: false, dibuat_pada: new Date() })
+// Hasil yang diharapkan: Akun tersimpan
+
+// ------------------------------------------------------------
+// [Laporan Bab 4 · TC-02 no. 2] ② Kode OTP dikirim
+// Jalankan di: RedisInsight · Workbench
+SET verif:email:USR-009900 731942 EX 900
+TTL verif:email:USR-009900
+// Hasil yang diharapkan: OK · TTL sekitar 900 detik
+
+// ------------------------------------------------------------
+// [Laporan Bab 4 · TC-02 no. 3] ③ Pengguna memasukkan kode
+// Jalankan di: RedisInsight · Workbench
+GET verif:email:USR-009900
+// Hasil yang diharapkan: "731942", kode cocok
+
+// ------------------------------------------------------------
+// [Laporan Bab 4 · TC-02 no. 4] ④ Email terverifikasi, OTP dihapus
+// Jalankan di: Compass, lalu RedisInsight
+// Compass:
+db.users.updateOne({ _id: "USR-009900" }, { $set: { email_terverifikasi: true } })
+// RedisInsight:
+DEL verif:email:USR-009900
+// Hasil yang diharapkan: modifiedCount 1 · DEL 1
+
+// ------------------------------------------------------------
+// [Laporan Bab 4 · TC-02 no. 5] ⑤ Pendaftaran lain dengan email yang sama
+// Jalankan di: Compass · MONGOSH
+db.users.insertOne({ _id: "USR-009901", jenis: "eksternal", nama: "Akun Ganda", email: "bima.pratama@gmail.com" })
+// Hasil yang diharapkan: DITOLAK: E11000 duplicate key (email)
+
+// ------------------------------------------------------------
+// [Laporan Bab 4 · TC-02 no. 6] ⑥ Admin universitas memverifikasi identitas
+// Jalankan di: Compass · MONGOSH
+db.users.updateOne({ _id: "USR-009900" }, { $set: { "eksternal.status_verifikasi": "terverifikasi" } })
+// Hasil yang diharapkan: modifiedCount 1
+
+// ------------------------------------------------------------
+// [Laporan Bab 4 · TC-02 no. 7] ⑦ Login
+// Jalankan di: Compass · MONGOSH
+db.users.findOne({ email: "bima.pratama@gmail.com", email_terverifikasi: true, "eksternal.status_verifikasi": "terverifikasi" })
+// Hasil yang diharapkan: Dokumen USR-009900 ditemukan
+
+// ------------------------------------------------------------
+// [Laporan Bab 4 · TC-02 no. 8] ⑧ Sesi dibuat
+// Jalankan di: RedisInsight · Workbench
+HSET session:tok_b1m4x9 user_id USR-009900 jenis eksternal peran peminjam
+EXPIRE session:tok_b1m4x9 28800
+// Hasil yang diharapkan: HSET 3 · EXPIRE 1
+
+// ------------------------------------------------------------
+// [Laporan Bab 4 · TC-02 no. 9] ⑨ Akses "Pengajuan Saya"
+// Jalankan di: RedisInsight, lalu Compass
+// RedisInsight:
+HGET session:tok_b1m4x9 user_id
+// Compass:
+db.pengajuan.find({ "peminjam.user_id": "USR-009900" })
+// Hasil yang diharapkan: "USR-009900" · hasil kosong karena belum ada pengajuan
+
+// ------------------------------------------------------------
+// [Laporan Bab 4 · TC-02 no. 10] ⑩ Logout
+// Jalankan di: RedisInsight · Workbench
+DEL session:tok_b1m4x9
+EXISTS session:tok_b1m4x9
+// Hasil yang diharapkan: DEL 1 · EXISTS 0
